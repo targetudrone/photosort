@@ -1,45 +1,39 @@
 #!/bin/python3
 import shutil
-from PIL import Image
 from os import listdir,path,makedirs
 import datetime
 import PySimpleGUI as sg
+import exifread
+from joblib import Parallel, delayed
+import multiprocessing
 
-sourcepath = "./source/"
-sourcelist = listdir(sourcepath)
+source = "E:/DCIM/100MSDCF/"
+dest = "C:/Users/daniel/Pictures/import/"
+filelist = listdir(source)
 
-sg.theme('DarkTeal2')   # Add a touch of color
-# All the stuff inside your window.
-layout = [  [sg.Text('Some text on Row 1')],
-            [sg.Text('Enter something on Row 2'), sg.InputText()],
-            [sg.Button('Ok'), sg.Button('Cancel')] ]
+num_cores = multiprocessing.cpu_count()
+     
+def copyphotos(source, dest, x):
+  with open(source+x, "rb") as fh:
+    tags = exifread.process_file(fh, stop_tag="EXIF DateTimeOriginal")
+    creation_time = tags["EXIF DateTimeOriginal"]
+    fh.close
 
-# Create the Window
-window = sg.Window('Window Title', layout)
-# Event Loop to process "events" and get the "values" of the inputs
-while True:
-    event, values = window.read()
-    if event == sg.WIN_CLOSED or event == 'Cancel': # if user closes window or clicks cancel
-        break
-    print('You entered ', values[0])
+  if creation_time != None:
+    date = datetime.datetime.strptime(str(creation_time),"%Y:%m:%d %H:%M:%S")
+    extension = path.splitext(source+x)[1]
+    destpath = dest+str(date.year)+"/"+str(date.month)+"/"+str(date.day)+"/"
 
-window.close()
-
-
-
-
-def copyphotos(sourcepath, destpath):
-  for x in sourcelist:
-    im = Image.open(sourcepath+x)
-    exif = im.getexif()
-    creation_time = exif.get(36867)
-    
-    if creation_time != None:
-      date = datetime.datetime.strptime(creation_time,"%Y:%m:%d %H:%M:%S")
-      extension = path.splitext(sourcepath+x)[1]
-      destpath = "./dest/"+str(date.year)+"/"+str(date.month)+"/"+str(date.day)+"/"
-  
+    if extension == ".JPG":
       if not path.exists(destpath+x):
         makedirs(path.dirname(destpath), exist_ok=True)
-        shutil.copy(sourcepath+x, destpath+x )
-        print("copied file "+sourcepath+x+" to "+destpath+x)
+      shutil.copy(source+x, destpath+x )
+      print("copied file "+source+x+" to "+destpath+x)
+    else:
+      destpath = str(destpath+extension[1:]+"/")
+      if not path.exists(destpath+x):
+        makedirs(path.dirname(destpath), exist_ok=True)
+      shutil.copy(source+x, destpath+x )
+      print("copied file "+source+x+" to "+destpath+x)
+
+Parallel(n_jobs=num_cores)(delayed(copyphotos)(source,dest,x)for x in filelist)
